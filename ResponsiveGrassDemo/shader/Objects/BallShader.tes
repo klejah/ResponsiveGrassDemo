@@ -1,0 +1,68 @@
+/**
+ * (c) Klemens Jahrmann
+ * klemens.jahrmann@net1220.at
+ */
+
+#version 430
+
+layout(triangles, equal_spacing, ccw) in;
+
+uniform mat4 modelMatrix;
+uniform mat4 vpMatrix;
+uniform vec3 camPos;
+uniform vec3 lightDir;
+
+uniform bool hasHeightMap;
+uniform sampler2D heightMap;
+uniform float heightMapScale;
+
+in vec3 tcPosition[];
+in vec3 tcNormal[];
+in vec2 tcUv[];
+in vec3 tcTangent[];
+in vec3 tcBitangent[];
+
+out vec3 teViewRay;
+out vec3 teLightRay;
+out vec3 teReflectionRay;
+
+out vec3 teNormal;
+out vec2 teUv;
+out vec3 teTangent;
+out vec3 teBitangent;
+
+void main()
+{
+	float u = gl_TessCoord.x;
+	float v = gl_TessCoord.y;
+	float w = gl_TessCoord.z;
+
+	float r = max(length(tcPosition[0]), max(length(tcPosition[1]), length(tcPosition[2])));
+
+	teUv = tcUv[0] * u + tcUv[1] * v + tcUv[2] * w;
+	teNormal = tcNormal[0] * u + tcNormal[1] * v + tcNormal[2] * w;
+	vec3 tePosition = normalize(tcPosition[0] * u + tcPosition[1] * v + tcPosition[2] * w);
+	tePosition = tePosition * r;
+	teTangent = tcTangent[0] * u + tcTangent[1] * v + tcTangent[2] * w;
+	teBitangent = tcBitangent[0] * u + tcBitangent[1] * v + tcBitangent[2] * w;
+
+	mat3 invTrans = transpose(inverse(mat3(modelMatrix)));
+	teNormal = normalize(invTrans * teNormal);
+
+	vec4 wsPosition = modelMatrix * vec4(tePosition,1.0f);
+
+	if(hasHeightMap)
+	{
+		vec3 displacement = texture(heightMap, teUv).xyz * heightMapScale * teNormal;
+		wsPosition += vec4(displacement,0.0f);
+	}
+
+	gl_Position = vpMatrix * wsPosition;
+
+	teViewRay = wsPosition.xyz - camPos;
+	teLightRay = normalize(-lightDir);
+    teReflectionRay = normalize(reflect(teLightRay,teNormal));
+
+	teTangent = invTrans * teTangent;
+	teBitangent = invTrans * teBitangent;
+}

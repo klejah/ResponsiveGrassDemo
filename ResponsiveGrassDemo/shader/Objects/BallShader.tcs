@@ -1,0 +1,50 @@
+/**
+ * (c) Klemens Jahrmann
+ * klemens.jahrmann@net1220.at
+ */
+
+#version 430
+
+layout(vertices = 3) out;
+
+uniform mat4 modelMatrix;
+uniform vec3 camPos;
+uniform float minTessLevel;
+uniform float maxTessLevel;
+uniform float maxDistance;
+uniform float minDistance;
+
+in vec3 vPosition[];
+in vec3 vNormal[];
+in vec2 vUv[];
+in vec3 vTangent[];
+in vec3 vBitangent[];
+
+out vec3 tcPosition[];
+out vec3 tcNormal[];
+out vec2 tcUv[];
+out vec3 tcTangent[];
+out vec3 tcBitangent[];
+
+void main()
+{
+	tcPosition[gl_InvocationID] = vPosition[gl_InvocationID];
+	tcNormal[gl_InvocationID] = vNormal[gl_InvocationID];
+	tcUv[gl_InvocationID] = vUv[gl_InvocationID];
+	tcTangent[gl_InvocationID] = vTangent[gl_InvocationID];
+	tcBitangent[gl_InvocationID] = vBitangent[gl_InvocationID];
+
+	if(gl_InvocationID == 0)
+	{
+		vec4 p = modelMatrix * vec4(0.0f,0.0f,0.0f,1.0f);
+		float d = distance(p.xyz,camPos);
+
+		float level = minTessLevel + (maxTessLevel - minTessLevel) * (1.0f - clamp((d - minDistance) / (maxDistance - minDistance), 0.0f, 1.0f));
+		//level = level / level;
+
+		gl_TessLevelInner[0] = level;
+		gl_TessLevelOuter[0] = level;
+		gl_TessLevelOuter[1] = level;
+		gl_TessLevelOuter[2] = level;
+	}
+}

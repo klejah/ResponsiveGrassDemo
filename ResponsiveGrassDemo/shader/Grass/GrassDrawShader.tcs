@@ -1,0 +1,50 @@
+/**
+ * (c) Klemens Jahrmann
+ * klemens.jahrmann@net1220.at
+ */
+
+#version 430
+
+layout(vertices = 1) out;
+
+in vec4 vV1[];
+in vec4 vV2[];
+in vec4 vDebug[];
+in vec3 vBladeDir[];
+in vec3 vBladeUp[];
+
+patch out vec4 tcV1;
+patch out vec4 tcV2;
+patch out vec4 tcDebug;
+patch out vec3 tcBladeDir;
+patch out vec3 tcBladeUp;
+
+uniform vec3 camPos;
+uniform vec4 tessellationProps; //minTessLevel maxTessLevel maxDistance minDistance
+
+void main()
+{
+	gl_out[gl_InvocationID].gl_Position = gl_in[gl_InvocationID].gl_Position;
+	
+	tcV1 = vV1[0];
+	tcV2 = vV2[0];
+	tcDebug = vDebug[0];
+	tcBladeDir = vBladeDir[0];
+	tcBladeUp = vBladeUp[0];
+
+	const float d = distance(gl_in[0].gl_Position.xyz,camPos);
+	const float minTessLevel = tessellationProps.x;
+	const float maxTessLevel = tessellationProps.y;
+	const float maxDistance = tessellationProps.z;
+	const float minDistance = tessellationProps.w;
+	const float tessRange = maxTessLevel - minTessLevel;
+	const float rDistRange = 1.0f / (maxDistance - minDistance);
+	const float level = minTessLevel + tessRange * (1.0f - clamp((d - minDistance) * rDistRange, 0.0f, 1.0f));
+
+	gl_TessLevelInner[0] = 1.0f;
+	gl_TessLevelInner[1] = level;
+	gl_TessLevelOuter[0] = level;
+	gl_TessLevelOuter[1] = 1.0f;
+	gl_TessLevelOuter[2] = level;
+	gl_TessLevelOuter[3] = 1.0f;
+}

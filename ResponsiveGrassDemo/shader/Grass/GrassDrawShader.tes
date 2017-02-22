@@ -1,0 +1,149 @@
+/**
+ * (c) Klemens Jahrmann
+ * klemens.jahrmann@net1220.at
+ */
+
+#version 430
+
+layout(quads, equal_spacing, ccw) in;
+
+patch in vec4 tcV1;
+patch in vec4 tcV2;
+patch in vec4 tcDebug;
+patch in vec3 tcBladeDir;
+patch in vec3 tcBladeUp;
+
+out vec4 tePosition;
+out vec3 teNormal;
+out vec2 teUV;
+out vec4 teDebug;
+
+uniform mat4 vpMatrix;
+uniform vec3 lightDirection;
+uniform ivec2 halfScreenSize;
+
+float shapeConstant;
+
+subroutine vec3 form_position(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth);
+
+subroutine uniform form_position Form;
+
+//Declare forms
+layout(index = 0) subroutine (form_position) vec3 Quad(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 1.0f;
+	return mix(i1, i2, u);
+}
+
+layout(index = 1) subroutine (form_position) vec3 Triangle(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 2.0f;
+	float omu = 1.0f - u;
+	return mix(i1, i2, u + ((-v*u) + (v*omu))*0.5f);
+}
+
+layout(index = 2) subroutine (form_position) vec3 Quadratic(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 3.0f;
+	return mix(i1, i2, u - pow(v,2)*u);
+}
+
+layout(index = 3) subroutine (form_position) vec3 Quadratic3DShape(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 4.0f;
+	vec3 translation = normal * bladeWidth * (0.5f - abs(u - 0.5f)) * (1.0f - v); //position auf der normale verschoben bei mittelachse -> ca rechter winkel (u mit hat function)
+	return mix(i1, i2, u - pow(v,2)*u) + translation;
+}
+
+layout(index = 4) subroutine (form_position) vec3 Quadratic3DShapeMinWidth(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 5.0f;
+	vec4 i1V = vpMatrix * vec4(i1.xyz,1.0f);
+	i1V = i1V / i1V.w;
+	vec4 i2V = vpMatrix * vec4(i2.xyz,1.0f);
+	i2V = i2V / i2V.w;
+	vec4 widthV = i2V - i1V;
+	widthV.x = widthV.x * halfScreenSize.x;
+	widthV.y = widthV.y * halfScreenSize.y;
+	float width = length(widthV.xy);
+	float minWidth = 1.0f;
+	float widthSpan = 2.0f;
+	float widthF = 1.0f - min(max((width - minWidth) / widthSpan, 0.0f),1.0f); //width factor
+	vec3 position = mix(i1, i2, max(u - pow(v,2)*u,widthF*u));
+	position = position + normal * bladeWidth * (0.5f - abs(u - 0.5f)) * (1.0f - v); //position auf der normale verschoben bei mittelachse -> ca rechter winkel (u mit hat function)
+	return position;
+}
+
+layout(index = 5) subroutine (form_position) vec3 TriangleTipMinWidth(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 6.0f;
+	vec4 i1V = vpMatrix * vec4(i1.xyz,1.0f);
+	i1V = i1V / i1V.w;
+	vec4 i2V = vpMatrix * vec4(i2.xyz,1.0f);
+	i2V = i2V / i2V.w;
+	vec4 widthV = i2V - i1V;
+	widthV.x = widthV.x * halfScreenSize.x;
+	widthV.y = widthV.y * halfScreenSize.y;
+	float width = length(widthV.xy);
+	float minWidth = 1.0f;
+	float widthSpan = 2.0f;
+	float widthF = 1.0f - min(max((width - minWidth) / widthSpan, 0.0f),1.0f); //width factor
+	vec3 position = mix(i1, i2, 0.5f + (u - 0.5f) * max(1.0f - (max(v - 0.5f,0.0f) / (1.0f - 0.5f)),widthF)); //TODO watch out here 0.5f should be a variable
+	position = position + normal * bladeWidth * (0.5f - abs(u - 0.5f)) * (1.0f - (max(v - 0.5f,0.0f) / (1.0f - 0.5f))); //TODO watch out here 0.5f should be a variable
+	return position;
+}
+
+layout(index = 6) subroutine (form_position) vec3 Dandelion(const in vec3 i1, const in vec3 i2, const in float u, const in float v, const in vec3 normal, const in float bladeWidth)
+{
+	shapeConstant = 7.0f;
+	float omv = 1.0f - v;
+	float level = gl_TessLevelOuter[0];
+	float piLevel = 3.14159265358979f * max(level / 8.0f,1.0f);
+	float piLevelOmv = piLevel * omv;
+	return mix(i1, i2, 0.5f + (u - 0.5f) * (sqrt(omv) * (2 - omv - sqrt(abs(sin(piLevelOmv)) * abs(cos(piLevelOmv))))));
+}
+
+void main()
+{
+	float u = gl_TessCoord.x;
+	float omu = 1.0f - u;
+	float v = gl_TessCoord.y;
+	float omv = 1.0f - v;
+
+	vec3 off = tcBladeDir * tcV2.w;
+	vec3 off2 = off * 0.5f;
+
+	vec3 p0 = gl_in[0].gl_Position.xyz - off2;
+	vec3 p1 = tcV1.xyz - off2;
+	vec3 p2 = tcV2.xyz - off2;
+
+	vec3 h1 = p0 + v * (p1 - p0);
+	vec3 h2 = p1 + v * (p2 - p1);
+	vec3 i1 = h1 + v * (h2 - h1);
+	vec3 i2 = i1 + off;
+
+	vec3 bitangent = tcBladeDir;
+	vec3 tangent;
+
+	vec3 h1h2 = h2 - h1;
+	if(dot(h1h2, h1h2) < 1e-3)
+	{
+		tangent = tcBladeUp;
+	}
+	else
+	{
+		tangent = normalize(h1h2);
+	}
+
+	teUV = vec2(u,v);
+	teNormal = normalize(cross(tangent, bitangent));
+
+	vec3 position = Form(i1, i2, u, v, teNormal, tcV2.w);
+
+	if(dot(lightDirection, teNormal) > 0.0f)
+		teNormal = -teNormal;
+
+	teDebug = tcDebug;
+	gl_Position = vpMatrix * vec4(position, 1.0f);
+	tePosition = vec4(position, 1.5f * abs(sin(shapeConstant * tcV1.w)));
+}

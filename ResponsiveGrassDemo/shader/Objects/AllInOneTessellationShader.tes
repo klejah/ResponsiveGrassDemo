@@ -1,0 +1,87 @@
+/**
+ * (c) Klemens Jahrmann
+ * klemens.jahrmann@net1220.at
+ */
+
+#version 430
+
+layout(triangles, equal_spacing, ccw) in;
+
+uniform mat4 vpMatrix;
+uniform vec3 camPos;
+uniform vec3 lightDir;
+
+uniform bool hasHeightMap;
+uniform sampler2D heightMap;
+
+uniform bool hasUVs;
+uniform bool hasNormals;
+uniform bool hasTangentsAndBitangents;
+uniform bool hasNormalMap;
+uniform sampler2D normalMap;
+uniform bool hasDiffuseTexture;
+
+uniform vec4 textureTileAndOffset;
+uniform vec4 heightMapTileAndOffset;
+
+in vec4 tcPosition[];
+in vec3 tcNormal[];
+in vec2 tcUv[];
+in vec3 tcTangent[];
+in vec3 tcBitangent[];
+
+out vec3 teViewRay;
+out vec3 teLightRay;
+out vec3 teReflectionRay;
+
+out vec3 teNormal;
+out float teDepth;
+out vec2 teUv;
+out vec3 teTangent;
+out vec3 teBitangent;
+
+void main()
+{
+	float u = gl_TessCoord.x;
+	float v = gl_TessCoord.y;
+	float w = gl_TessCoord.z;
+
+	teUv = tcUv[0] * u + tcUv[1] * v + tcUv[2] * w;
+	teNormal = normalize(tcNormal[0] * u + tcNormal[1] * v + tcNormal[2] * w);
+	vec4 tePosition = tcPosition[0] * u + tcPosition[1] * v + tcPosition[2] * w;
+	teTangent = normalize(tcTangent[0] * u + tcTangent[1] * v + tcTangent[2] * w);
+	teBitangent = normalize(tcBitangent[0] * u + tcBitangent[1] * v + tcBitangent[2] * w);
+
+	if(hasUVs && hasHeightMap)
+	{
+		vec2 heightMapRead = texture(heightMap, teUv * heightMapTileAndOffset.xy + heightMapTileAndOffset.zw).xy;
+		vec3 displacement = heightMapRead.x * heightMapRead.y * teNormal;
+		tePosition += vec4(displacement, 0.0f);
+	}
+
+	gl_Position = vpMatrix * tePosition;
+
+	teViewRay = tePosition.xyz - camPos;
+	teDepth = length(teViewRay);
+	teViewRay = teViewRay / teDepth;
+	teLightRay = normalize(-lightDir);
+    teReflectionRay = normalize(reflect(teLightRay,teNormal));
+
+	if(hasUVs && hasNormals && hasTangentsAndBitangents && hasNormalMap && hasDiffuseTexture)
+	{
+		mat3 tbn = mat3(teTangent, teBitangent, teNormal);
+        vec3 texNormal;
+        if(hasHeightMap)
+        {
+            texNormal = normalize(texture(normalMap, teUv * heightMapTileAndOffset.xy + heightMapTileAndOffset.zw).xyz * 2.0f - 1.0f);
+        }
+        else
+        {
+            texNormal = normalize(texture(normalMap, teUv * textureTileAndOffset.xy + textureTileAndOffset.zw).xyz * 2.0f - 1.0f);
+        }
+        teNormal = texNormal;
+		teViewRay = normalize(tbn * teViewRay);
+		teLightRay = normalize(tbn * teLightRay);
+		teReflectionRay = normalize(tbn * teReflectionRay);
+	}
+}
